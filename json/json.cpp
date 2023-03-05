@@ -5,29 +5,47 @@
 
 namespace json {
 
-Json::Json(Json&& rhs) : type_(rhs.type_) {
-  rhs.type_ = Type::Null;
-  data_ = rhs.data_;  // data_ has the maximum length in the union.
-  rhs.data_ = nullptr;
+Json::Json(const Json& rhs) : type_(rhs.type_), data_(nullptr) {
+  if (rhs.is_object()) {
+    if (rhs.data_ != nullptr) {
+      data_ =
+          new (std::nothrow) ObjectData(*static_cast<ObjectData*>(rhs.data_));
+    }
+  } else if (rhs.is_string()) {
+    if (rhs.data_ != nullptr) {
+      data_ =
+          new (std::nothrow) StringData(*static_cast<StringData*>(rhs.data_));
+    }
+  } else if (rhs.is_array()) {
+    if (rhs.data_ != nullptr) {
+      data_ = new (std::nothrow) ArrayData(*static_cast<ArrayData*>(rhs.data_));
+    }
+  } else {
+    data_ = rhs.data_;  // data_ has the maximum length in the union.
+  }
 }
 
 Json& Json::operator=(Json&& rhs) {
-  if (&rhs != this) {
-    free();
-    if (!rhs.is_null()) {  // for don't change g_null_json
-      type_ = rhs.type_;
-      data_ = rhs.data_;
-      rhs.type_ = Type::Null;
-      rhs.data_ = nullptr;
-      return *this;
-    }
-    type_ = Type::Null;
-    data_ = nullptr;
+  if (this == &g_null_json_) {  // for don't modify g_null_json
+    return *this;
   }
+  Json j(std::move(rhs));
+  std::swap(j.type_, type_);
+  std::swap(j.data_, data_);
   return *this;
 }
 
-Json& Json::operator[](size_t i) const {
+Json& Json::operator=(const Json& rhs) {
+  if (this == &g_null_json_) {  // for don't modify g_null_json
+    return *this;
+  }
+  Json j(rhs);
+  std::swap(j.type_, type_);
+  std::swap(j.data_, data_);
+  return *this;
+}
+
+Json& Json::operator[](size_t i) {
   if (is_array()) {
     auto data = static_cast<ArrayData*>(data_);
     if (data != nullptr && i < data->size()) {
@@ -37,7 +55,7 @@ Json& Json::operator[](size_t i) const {
   return g_null_json_;
 }
 
-Json& Json::operator[](const std::string& key) const {
+Json& Json::operator[](const std::string& key) {
   if (is_object()) {
     auto data = static_cast<ObjectData*>(data_);
     if (data != nullptr) {
@@ -50,7 +68,7 @@ Json& Json::operator[](const std::string& key) const {
   return g_null_json_;
 }
 
-bool Json::emplace(std::string key, Json&& value) {
+bool Json::add_kv(std::string key, Json value) {
   if (value.is_null() || value.is_error()) {
     return false;
   }
@@ -62,7 +80,25 @@ bool Json::emplace(std::string key, Json&& value) {
       }
     }
     auto& data = *static_cast<ObjectData*>(data_);
-    return data.emplace(std::move(key), std::forward<Json>(value)).second;
+    return data.emplace(std::move(key), std::move(value)).second;
+  }
+  return false;
+}
+
+bool Json::add_elem(Json value) {
+  if (value.is_null() || value.is_error()) {
+    return false;
+  }
+  if (is_array()) {
+    if (data_ == nullptr) {
+      data_ = new (std::nothrow) ArrayData;
+      if (data_ == nullptr) {
+        return false;
+      }
+    }
+    auto& data = *static_cast<ArrayData*>(data_);
+    data.emplace_back(std::move(value));
+    return true;
   }
   return false;
 }
@@ -89,8 +125,7 @@ char* Json::marshal(char* buffer) const {
     *buffer = '{';
     ++buffer;
     if (data_ != nullptr) {
-      const auto& data =
-          *static_cast<ObjectData*>(data_);
+      const auto& data = *static_cast<ObjectData*>(data_);
       size_t cnt = data.size();
       for (const auto& kv : data) {
         *buffer = '"';
@@ -145,8 +180,7 @@ size_t Json::marshal_count() const {
     count += 32;
   } else if (is_object()) {
     if (data_ != nullptr) {
-      const auto& data =
-          *static_cast<ObjectData*>(data_);
+      const auto& data = *static_cast<ObjectData*>(data_);
       count += (data.size() > 0 ? data.size() - 1 : 0);  // the number of ','
       for (const auto& kv : data) {
         count += 3 + kv.first.size() + kv.second.marshal_count();  // "xxx":xxx
@@ -185,7 +219,6 @@ void Json::build(const char* raw) {
     }
     type_ = Type::Object;
     data_ = j.data_;
-    j.type_ = Type::Null;
     j.data_ = nullptr;
     return;
   }
@@ -219,8 +252,7 @@ Json Json::build_object(const char* raw, const char*& next) {
     next = p + 1;
     return Json(Type::Object, nullptr);
   }
-  ObjectData* data =
-      new (std::nothrow) ObjectData;
+  ObjectData* data = new (std::nothrow) ObjectData;
   if (data == nullptr) {
     return build_error(ErrMsg[3]);
   }

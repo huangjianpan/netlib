@@ -1,12 +1,49 @@
-/**
- * @author huangjianpan
- * C++17
- */
+// @author huangjianpan
+// using C++17
+
+// Note:
+// 1. operator[]() possible return Json::g_null_json_ which should not be
+// modified, so need to check whether the return value is null.
+// 2. use is_null() to judge whether the json object exist.
+
+// Example 1: create object
+// json::Json j(json::Json::Object{});
+// j.add(k, v)
+
+// Example 2: create array
+// json::Json j(json::Json::Array{});
+// j.add(elem);
+
+// Example 3: unmarshal and assignment
+// const char* errmsg = nullptr;
+// json::Json j = json::Json::unmarshal(json_str, errmsg);
+// if (errmsg == nullptr) {
+//   std::string s = j["names"][0];
+//   int age = j["age"]
+//   Json& info = j["info"];
+//   if (!info.is_null()) {
+//     std::cout << (std::string)info << std::endl;
+//   }
+// } else {
+//   std::cout << errmsg << std::endl;
+// }
+
+// Example 5: move data
+// json::Json j = json::Json::unmarshal(json_str, errmsg);
+// std::string name;
+// j["name"].move_to(name);
+
+// Example 4: marshal
+// json::Json j(json::Json::Object{});
+// j.add(k, v);
+// ...
+// std::cout << j.marshal() << std::endl;
+
 #pragma once
 
+#include <map>
 #include <string>
 #include <type_traits>
-#include <unordered_map>
 #include <vector>
 
 namespace json {
@@ -28,82 +65,222 @@ class Json {
       "build array error: mismatch ',' or ']'"               // 11
   };
 
-  using ObjectData = std::unordered_map<std::string, Json>;
+  using ObjectData = std::map<std::string, Json>;
   using ArrayData = std::vector<Json>;
   using StringData = std::string;
 
- public:
+  template <typename T>
+  struct static_array_to_pointer {
+    typedef T type;
+  };
+
+  template <typename T, size_t N>
+  struct static_array_to_pointer<T[N]> {
+    typedef T* type;
+  };
+
   struct Type {
-    static constexpr size_t Null = 1 << 0;
+    static constexpr size_t Null = 1 << 0;  // only g_null_json_ is null
     static constexpr size_t Bool = 1 << 1;
     static constexpr size_t Integer = 1 << 2;
     static constexpr size_t Float = 1 << 3;
-    static constexpr size_t Error = 1 << 4;
+    static constexpr size_t Error = 1 << 4;  // only Json internal use
     static constexpr size_t String = 1 << 5;
     static constexpr size_t Object = 1 << 6;
     static constexpr size_t Array = 1 << 7;
   };
 
-  Json() : type_(Type::Object), data_(nullptr) {}
+ public:
+  struct Object {};
 
-  Json(Json&& rhs);
+  struct Array {};
 
-  Json(const Json& rhs) = delete;
+  Json(Object) : type_(Type::Object), data_(nullptr) {}
 
-  // use is_error() or errmsg() to check whether it was failed to deserialize.
-  Json(const char* raw) { build(raw); }
+  Json(Array) : type_(Type::Array), data_(nullptr) {}
 
-  // use is_error() or errmsg() to check whether it was failed to deserialize.
-  Json(const std::string& raw) { build(raw.c_str()); }
+  Json(Json&& rhs) : type_(rhs.type_) {
+    data_ = rhs.data_;    // data_ has the maximum length in the union.
+    rhs.data_ = nullptr;  // don't change rhs's type
+  }
+
+  Json(const Json& rhs);
 
   ~Json() { free(); }
 
   Json& operator=(Json&& rhs);
 
-  Json& operator=(const Json& rhs) = delete;
+  Json& operator=(const Json& rhs);
 
-  Json& operator[](size_t i) const;
+  Json& operator[](size_t i);
 
   template <typename T>
-  Json& operator[](T i) const {
-    static_assert(std::is_integral<T>::value, "Type T should be integer");
+  Json& operator[](T i) {
+    static_assert(std::is_integral<T>::value && !std::is_same<T, bool>::value,
+                  "Type T should be integer");
     return operator[](static_cast<size_t>(i));
   }
 
-  Json& operator[](const std::string& key) const;
+  Json& operator[](const std::string& key);
 
-  Json& operator[](const char* key) const {
-    return operator[](std::string(key));
+  Json& operator[](const char* key) { return operator[](std::string(key)); }
+
+  template <typename Value>
+  bool add(std::string key, Value&& value) {
+    using R_Value = typename std::remove_reference<Value>::type;
+    static_assert(
+        std::is_same<R_Value, bool>::value ||
+            std::is_integral<R_Value>::value ||
+            std::is_floating_point<R_Value>::value ||
+            std::is_same<R_Value, const char*>::value ||
+            std::is_same<R_Value, std::string>::value ||
+            std::is_same<typename static_array_to_pointer<R_Value>::type,
+                         const char*>::value ||
+            std::is_same<R_Value, Json>::value ||
+            std::is_same<R_Value, const Json>::value,
+        "Type Value should be bool, integer, float, string, Json");
+
+    if constexpr (std::is_same<R_Value, bool>::value) {
+      return add_kv(std::move(key), Json((bool)value));
+    } else if constexpr (std::is_integral<R_Value>::value) {
+      return add_kv(std::move(key), Json((long long)value));
+    } else if constexpr (std::is_floating_point<R_Value>::value) {
+      return add_kv(std::move(key), Json((double)value));
+    } else if constexpr (std::is_same<R_Value, const char*>::value ||
+                         std::is_same<R_Value, std::string>::value ||
+                         std::is_same<
+                             typename static_array_to_pointer<R_Value>::type,
+                             const char*>::value) {
+      return add_kv(
+          std::move(key),
+          Json(Type::String, new std::string(std::forward<Value>(value))));
+
+    } else if constexpr (std::is_same<R_Value, Json>::value ||
+                         std::is_same<R_Value, const Json>::value) {
+      return add_kv(std::move(key), std::forward<Value>(value));
+    } else {
+      return false;
+    }
   }
 
-  bool emplace(std::string key, Json&& value);
-
-  // TODO: const char(&)[5] -> const char*
-  template <typename Key, typename Value>
-  bool emplace(Key&& key, Value&& value) {
-    using R_Key = typename std::remove_reference<Key>::type;
+  template <typename Value>
+  bool add(Value&& value) {
     using R_Value = typename std::remove_reference<Value>::type;
+    static_assert(
+        std::is_same<R_Value, bool>::value ||
+            std::is_integral<R_Value>::value ||
+            std::is_floating_point<R_Value>::value ||
+            std::is_same<R_Value, const char*>::value ||
+            std::is_same<R_Value, std::string>::value ||
+            std::is_same<typename static_array_to_pointer<R_Value>::type,
+                         const char*>::value ||
+            std::is_same<R_Value, Json>::value ||
+            std::is_same<R_Value, const Json>::value,
+        "Type Value should be bool, integer, float, string, Json");
 
-    static_assert(std::is_same<R_Key, std::string>::value ||
-                      std::is_same<R_Key, const char*>::value,
-                  "Type Key should be std::string or const char*");
     if constexpr (std::is_same<R_Value, bool>::value) {
-      return emplace(std::forward<Key>(key), Json((bool)value));
-    }
-    if constexpr (std::is_integral<R_Value>::value) {
-      return emplace(std::forward<Key>(key), Json((long long)value));
-    }
-    if constexpr (std::is_floating_point<R_Value>::value) {
-      return emplace(std::forward<Key>(key), Json((double)value));
-    }
-    if constexpr (std::is_same<R_Value, const char*>::value ||
-                  std::is_same<R_Value, std::string>::value) {
-      return emplace(
-          std::forward<Key>(key),
+      return add_elem(Json((bool)value));
+    } else if constexpr (std::is_integral<R_Value>::value) {
+      return add_elem(Json((long long)value));
+    } else if constexpr (std::is_floating_point<R_Value>::value) {
+      return add_elem(Json((double)value));
+    } else if constexpr (std::is_same<R_Value, const char*>::value ||
+                         std::is_same<R_Value, std::string>::value ||
+                         std::is_same<
+                             typename static_array_to_pointer<R_Value>::type,
+                             const char*>::value) {
+      return add_elem(
           Json(Type::String, new std::string(std::forward<Value>(value))));
+
+    } else if constexpr (std::is_same<R_Value, Json>::value ||
+                         std::is_same<R_Value, const Json>::value) {
+      return add_elem(std::forward<Value>(value));
+    } else {
+      return false;
     }
-    if constexpr (std::is_same<R_Value, Json>::value) {
-      return emplace(std::forward<Key>(key), std::forward<Value>(value));
+  }
+
+  template <typename T>
+  bool move_to(T& ret) {
+    static_assert(
+        std::is_same<T, bool>::value || std::is_same<T, std::string>::value ||
+            std::is_integral<T>::value || std::is_floating_point<T>::value,
+        "Type T should be bool, integer, float, string");
+    if constexpr (std::is_same<T, bool>::value) {
+      ret = is_bool() ? b_ : false;
+      return is_bool();
+    } else if constexpr (std::is_integral<T>::value) {
+      ret = is_integer() ? static_cast<T>(i_) : static_cast<T>(0);
+      return is_integer();
+    } else if constexpr (std::is_floating_point<T>::value) {
+      ret = is_float() ? static_cast<T>(f_) : static_cast<T>(0.0);
+      return is_float();
+    } else if constexpr (std::is_same<T, std::string>::value) {
+      ret = is_string() && data_ != nullptr
+                ? std::move(*static_cast<StringData*>(data_))
+                : "";
+      return is_string();
+    } else {
+      return false;
+    }
+  }
+
+  template <typename T>
+  bool move_to(std::map<std::string, T>& ret,
+               void (*transfer)(Json&, T&) = nullptr) {
+    if (is_object()) {
+      ret.clear();
+      if (data_ == nullptr) {
+        return true;
+      }
+      auto& data = *static_cast<ObjectData*>(data_);
+      for (auto& kv : data) {
+        if constexpr (std::is_same<T, bool>::value ||
+                      std::is_integral<T>::value ||
+                      std::is_floating_point<T>::value) {
+          ret.emplace(kv.first, static_cast<T>(kv.second));
+        } else if constexpr (std::is_same<T, std::string>::value) {
+          ret.emplace(
+              kv.first,
+              kv.second.data_ == nullptr || !kv.second.is_string()
+                  ? ""
+                  : std::move(*static_cast<StringData*>(kv.second.data_)));
+        } else {
+          T t;
+          transfer(kv.second, t);
+          ret.emplace(kv.first, std::move(t));
+        }
+      }
+      return true;
+    }
+    return false;
+  }
+
+  template <typename T>
+  bool move_to(std::vector<T>& ret, void (*transfer)(Json&, T&) = nullptr) {
+    if (is_array()) {
+      ret.clear();
+      if (data_ == nullptr) {
+        return true;
+      }
+      auto& data = *static_cast<ArrayData*>(data_);
+      ret.reserve(data.size());
+      for (auto& e : data) {
+        if constexpr (std::is_same<T, bool>::value ||
+                      std::is_integral<T>::value ||
+                      std::is_floating_point<T>::value) {
+          ret.emplace_back(static_cast<T>(e));
+        } else if constexpr (std::is_same<T, std::string>::value) {
+          ret.emplace_back(e.data_ == nullptr || !e.is_string()
+                               ? ""
+                               : std::move(*static_cast<StringData*>(e.data_)));
+        } else {
+          T t;
+          transfer(e, t);
+          ret.emplace_back(std::move(t));
+        }
+      }
+      return true;
     }
     return false;
   }
@@ -116,25 +293,17 @@ class Json {
         "Type T should be integer or float");
     if constexpr (std::is_same<T, bool>::value) {  // note: bool is integral
       return is_bool() ? b_ : false;
-    }
-    if constexpr (std::is_integral<T>::value) {
+    } else if constexpr (std::is_integral<T>::value) {
       return is_integer() ? static_cast<T>(i_)
                           : (is_float() ? static_cast<T>(f_) : 0);
-    }
-    if constexpr (std::is_floating_point<T>::value) {
+    } else if constexpr (std::is_floating_point<T>::value) {
       return is_float() ? static_cast<T>(f_)
                         : (is_integer() ? static_cast<T>(i_) : 0);
-    }
-    if constexpr (std::is_same<T, std::string>::value) {
+    } else if constexpr (std::is_same<T, std::string>::value) {
       return (is_string() && data_ != nullptr)
                  ? *static_cast<std::string*>(data_)
                  : "";
     }
-  }
-
-  // errmsg: output error message.
-  const char* errmsg() const {
-    return is_error() ? static_cast<const char*>(data_) : nullptr;
   }
 
   // marshal: serialize the json object.
@@ -154,13 +323,27 @@ class Json {
   // marshal_count: calculate the approximate length of serizalization.
   size_t marshal_count() const;
 
+  static Json unmarshal(const char* raw, const char*& errmsg) {
+    Json j(Object{});
+    j.build(raw);
+    if (j.is_error()) {
+      errmsg = static_cast<const char*>(j.data_);
+      return Json(Object{});
+    }
+    return j;
+  }
+
+  static Json unmarshal(const std::string& raw, const char*& errmsg) {
+    return unmarshal(raw.c_str(), errmsg);
+  }
+
   bool is_null() const { return type_ & Type::Null; }
 
   bool is_bool() const { return type_ & Type::Bool; }
 
-  bool is_numeric() const { return type_ & (Type::Integer | Type::Float); }
+  bool is_integer() const { return type_ & Type::Integer; }
 
-  bool is_error() const { return type_ & Type::Error; }
+  bool is_float() const { return type_ & Type::Float; }
 
   bool is_object() const { return type_ & Type::Object; }
 
@@ -169,21 +352,23 @@ class Json {
   bool is_string() const { return type_ & Type::String; }
 
  private:
-  bool is_integer() const { return type_ & Type::Integer; }
-
-  bool is_float() const { return type_ & Type::Float; }
+  bool is_error() const { return type_ & Type::Error; }
 
   bool is_use_data() const {
     return type_ & (Type::String | Type::Object | Type::Array | Type::Error);
   }
 
+  bool add_kv(std::string key, Json value);
+
+  bool add_elem(Json value);
+
   void free() {
     if (is_string()) {
-      delete static_cast<std::string*>(data_);
+      delete static_cast<StringData*>(data_);
     } else if (is_object()) {
-      delete static_cast<std::unordered_map<std::string, Json>*>(data_);
-    } else {
-      delete static_cast<std::vector<Json>*>(data_);
+      delete static_cast<ObjectData*>(data_);
+    } else if (is_array()) {
+      delete static_cast<ArrayData*>(data_);
     }
   }
 
@@ -211,21 +396,16 @@ class Json {
   static Json build_array(const char* raw, const char*& next);
 
   static Json build_error(const char* errmsg) {
-    return Json(Type::Error, (void*)errmsg);
+    return Json((size_t)Type::Error, (void*)errmsg);
   }
 
  private:
   size_t type_;
   union {
-    bool b_;
-    long long i_;
-    double f_;
-
-    // data_: the underlaying data of string, object, array
-    //   string is std::string*
-    //   object is std::unordered_map<std::string, Json>*
-    //   array  is std::vector<Json>*
-    void* data_;
+    bool b_;       // store bool value
+    long long i_;  // store integer value
+    double f_;     // store float value
+    void* data_;   // the underlaying data of string, object, array
   };
 
   static Json g_null_json_;
