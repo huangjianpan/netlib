@@ -221,6 +221,7 @@ class Json {
                 : "";
       return is_string();
     } else {
+      ret = T();
       return false;
     }
   }
