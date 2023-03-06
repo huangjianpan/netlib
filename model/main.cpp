@@ -29,14 +29,8 @@ std::string read_file() {
 
 int main() {
   model::Req r;
-  json::unmarshal(read_file().c_str(), r);
-  std::cout << r.id << std::endl;
-  std::cout << r.name << std::endl;
-  std::cout << r.src.lat << std::endl;
-  std::cout << r.src.lng << std::endl;
-  for (auto& kv : r.extra) {
-    std::cout << kv.first << " " << kv.second.lng << " " << kv.second.lat
-              << std::endl;
-  }
+  json::unmarshal(read_file(), r);
+  std::cout << json::marshal(std::move(r)) << std::endl;
+  std::cout << json::marshal(r) << std::endl;
   return 0;
 }

@@ -9,25 +9,6 @@ import (
 
 // sudo apt install clang-10 --install-suggests
 
-type Input struct {
-	Clang             string   `json:"clang"`
-	IncludeDirectorys []string `json:"include_directory"`
-	HeaderFiles       []string `json:"cxx_files"`
-	// OutputFile        string   `json:"output_file"`
-}
-
-func GetInput(config string) (*Input, error) {
-	bs, err := os.ReadFile(config)
-	if err != nil {
-		return nil, err
-	}
-	input := &Input{}
-	if err := json.Unmarshal(bs, input); err != nil {
-		return nil, err
-	}
-	return input, nil
-}
-
 func main() {
 	if len(os.Args) < 2 {
 		fmt.Printf(`usage: ./json_gen <config.json>
@@ -49,11 +30,30 @@ execute:
 	}
 	input, err := GetInput(os.Args[1])
 	if err != nil {
-		os.Stderr.Write([]byte(fmt.Sprintf("started failed, error: %v", err)))
+		os.Stderr.Write([]byte(fmt.Sprintf("started failed, error: %v\n", err)))
 		return
 	}
 	p := generator.NewGenerator(input.Clang, input.HeaderFiles, input.IncludeDirectorys)
 	if err := p.Generate(); err != nil {
 		fmt.Println(err)
 	}
+}
+
+type Input struct {
+	Clang             string   `json:"clang"`
+	IncludeDirectorys []string `json:"include_directory"`
+	HeaderFiles       []string `json:"cxx_files"`
+	// OutputFile        string   `json:"output_file"`
+}
+
+func GetInput(config string) (*Input, error) {
+	bs, err := os.ReadFile(config)
+	if err != nil {
+		return nil, err
+	}
+	input := &Input{}
+	if err := json.Unmarshal(bs, input); err != nil {
+		return nil, err
+	}
+	return input, nil
 }

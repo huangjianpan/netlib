@@ -1,0 +1,13 @@
+{
+    "dest": {
+        "latitude": 0.0,
+        "longitude": 0.0
+    },
+    "extra": {},
+    "id": 123434,
+    "name": "aabb",
+    "src": {
+        "latitude": 123.234999999999999,
+        "longitude": 1234.546299999999974
+    }
+}

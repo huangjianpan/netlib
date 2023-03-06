@@ -231,7 +231,16 @@ func (p *Generator) GenerateCode() *Generator {
 		return p
 	}
 	for _, info := range p.ClassInfos {
-		p.generateCode(&FieldType{
+		p.generateUnmarshalCode(&FieldType{
+			Name: info.ClassName,
+			Type: FieldTypeCustom,
+		})
+	}
+	for k := range p.HadGenCodeType {
+		delete(p.HadGenCodeType, k)
+	}
+	for _, info := range p.ClassInfos {
+		p.generateMarshalCode(&FieldType{
 			Name: info.ClassName,
 			Type: FieldTypeCustom,
 		})
@@ -239,47 +248,144 @@ func (p *Generator) GenerateCode() *Generator {
 	return p
 }
 
-func (p *Generator) generateCode(f *FieldType) {
+func (p *Generator) generateMarshalCode(f *FieldType) {
 	switch f.Type {
-	case FieldTypePOD, FieldTypeString:
-		p.generateCodePODAndString(f)
 	case FieldTypeMap:
-		p.generateCodeMap(f)
+		p.generateMarshalCodeMap(f)
 	case FieldTypeArray:
-		p.generateCodeArray(f)
+		p.generateMarshalCodeArray(f)
 	case FieldTypeCustom:
-		p.generateCodeCustom(f)
+		p.generateMarshalCodeCustom(f)
 	}
 }
 
-func (p *Generator) generateCodePODAndString(f *FieldType) {
+func (p *Generator) generateMarshalCodeMap(f *FieldType) {
+	getCode := func(t *FieldType) string {
+		switch t.Type {
+		case FieldTypePOD:
+			return "kv.second"
+		case FieldTypeString:
+			return "std::move(kv.second)"
+		default:
+			return "convert(std::move(kv.second))"
+		}
+	}
+	if _, ok := p.HadGenCodeType[f.Name]; !ok {
+		p.HadGenCodeType[f.Name] = struct{}{}
+		p.generateMarshalCode(f.Value[1])
+		p.Code = append(p.Code, fmt.Sprintf(
+			"inline json::Json convert(%s&& model) {\n"+
+				"  json::Json j(json::Json::Object{});\n"+
+				"  for (auto& kv : model) {\n"+
+				"    j.add(kv.first, %s);\n"+
+				"  }\n"+
+				"  return j;\n"+
+				"}", f.Name, getCode(f.Value[1])))
+	}
+}
+
+func (p *Generator) generateMarshalCodeArray(f *FieldType) {
+	getCode := func(t *FieldType) string {
+		switch t.Type {
+		case FieldTypePOD:
+			return "elem"
+		case FieldTypeString:
+			return "std::move(elem)"
+		default:
+			return "convert(std::move(elem))"
+		}
+	}
+	if _, ok := p.HadGenCodeType[f.Name]; !ok {
+		p.HadGenCodeType[f.Name] = struct{}{}
+		p.generateMarshalCode(f.Value[0])
+		p.Code = append(p.Code, fmt.Sprintf(
+			"inline json::Json convert(%s&& model) {\n"+
+				"  json::Json j(json::Json::Array{});\n"+
+				"  for (auto& elem : model) {\n"+
+				"    j.add(%s);\n"+
+				"  }\n"+
+				"  return j;\n"+
+				"}", f.Name, getCode(f.Value[0])))
+	}
+}
+
+func (p *Generator) generateMarshalCodeCustom(f *FieldType) {
+	if _, ok := p.HadGenCodeType[f.Name]; !ok {
+		p.HadGenCodeType[f.Name] = struct{}{}
+		code := fmt.Sprintf("inline json::Json convert(%s&& model) {\n"+
+			"  json::Json j(json::Json::Object{});\n", f.Name)
+		classInfo, exist := p.ClassInfos[f.Name]
+		if !exist {
+			p.ErrMsg = fmt.Errorf("generate code failed, type %s not exist", f.Name)
+			return
+		}
+		for _, f := range classInfo.Fields {
+			p.generateMarshalCode(f.Type)
+			switch f.Type.Type {
+			case FieldTypePOD:
+				code += fmt.Sprintf("  j.add(\"%s\", model.%s);\n", f.Attr.JsonAttr.Name, f.Name)
+			case FieldTypeString:
+				code += fmt.Sprintf("  j.add(\"%s\", std::move(model.%s));\n", f.Attr.JsonAttr.Name, f.Name)
+			default:
+				code += fmt.Sprintf("  j.add(\"%s\", convert(std::move(model.%s)));\n", f.Attr.JsonAttr.Name, f.Name)
+			}
+		}
+		code += "  return j;\n}"
+		p.Code = append(p.Code, code)
+
+		p.Code = append(p.Code, fmt.Sprintf(
+			"inline std::string marshal(const %s& model) {\n"+
+				"  return convert(%s(model)).marshal();\n"+
+				"}", f.Name, f.Name))
+
+		p.Code = append(p.Code, fmt.Sprintf(
+			"inline std::string marshal(%s&& model) {\n"+
+				"  return convert(std::move(model)).marshal();\n"+
+				"}", f.Name))
+	}
+}
+
+func (p *Generator) generateUnmarshalCode(f *FieldType) {
+	switch f.Type {
+	case FieldTypePOD, FieldTypeString:
+		p.generateUnmarshalCodePODAndString(f)
+	case FieldTypeMap:
+		p.generateUnmarshalCodeMap(f)
+	case FieldTypeArray:
+		p.generateUnmarshalCodeArray(f)
+	case FieldTypeCustom:
+		p.generateUnmarshalCodeCustom(f)
+	}
+}
+
+func (p *Generator) generateUnmarshalCodePODAndString(f *FieldType) {
 	if _, ok := p.HadGenCodeType[f.Name]; !ok {
 		p.HadGenCodeType[f.Name] = struct{}{}
 		p.Code = append(p.Code, fmt.Sprintf("inline void unmarshal(json::Json& j, %s& ret) {\n  j.move_to(ret);\n}", f.Name))
 	}
 }
 
-func (p *Generator) generateCodeMap(f *FieldType) {
+func (p *Generator) generateUnmarshalCodeMap(f *FieldType) {
 	if _, ok := p.HadGenCodeType[f.Name]; !ok {
 		p.HadGenCodeType[f.Name] = struct{}{}
-		p.generateCode(f.Value[1])
+		p.generateUnmarshalCode(f.Value[1])
 		p.Code = append(p.Code, fmt.Sprintf("inline void unmarshal(json::Json& j, %s& ret) {\n"+
 			"  j.move_to(ret, static_cast<void(*)(Json&, %s&)>(unmarshal));\n"+
 			"}", f.Name, f.Value[1].Name))
 	}
 }
 
-func (p *Generator) generateCodeArray(f *FieldType) {
+func (p *Generator) generateUnmarshalCodeArray(f *FieldType) {
 	if _, ok := p.HadGenCodeType[f.Name]; !ok {
 		p.HadGenCodeType[f.Name] = struct{}{}
-		p.generateCode(f.Value[0])
+		p.generateUnmarshalCode(f.Value[0])
 		p.Code = append(p.Code, fmt.Sprintf("inline void unmarshal(json::Json& j, %s& ret) {\n"+
 			"  j.move_to(ret, static_cast<void(*)(Json&, %s&)>(unmarshal));\n"+
 			"}", f.Name, f.Value[0].Name))
 	}
 }
 
-func (p *Generator) generateCodeCustom(f *FieldType) {
+func (p *Generator) generateUnmarshalCodeCustom(f *FieldType) {
 	if _, ok := p.HadGenCodeType[f.Name]; !ok {
 		p.HadGenCodeType[f.Name] = struct{}{}
 		code := fmt.Sprintf("inline void unmarshal(json::Json& j, %s& ret) {\n", f.Name)
@@ -289,7 +395,7 @@ func (p *Generator) generateCodeCustom(f *FieldType) {
 			return
 		}
 		for _, f := range classInfo.Fields {
-			p.generateCode(f.Type)
+			p.generateUnmarshalCode(f.Type)
 			code += fmt.Sprintf("  unmarshal(j[\"%s\"], ret.%s);\n", f.Attr.JsonAttr.Name, f.Name)
 		}
 		code += "}"
@@ -303,6 +409,9 @@ func (p *Generator) generateCodeCustom(f *FieldType) {
 			"  }\n"+
 			"  unmarshal(j, ret);\n"+
 			"  return nullptr;\n}", f.Name))
+
+		p.Code = append(p.Code, fmt.Sprintf("inline const char* unmarshal(const std::string& raw, %s& ret) {\n"+
+			"  return unmarshal(raw.c_str(), ret);\n}", f.Name))
 	}
 }
 

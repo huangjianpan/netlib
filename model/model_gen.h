@@ -1,6 +1,6 @@
 #pragma once
 
-#include "model/model.h"
+#include "../model/model.h"
 #include "json.h"
 
 namespace json {
@@ -22,6 +22,10 @@ inline const char* unmarshal(const char* raw, model::Location& ret) {
   }
   unmarshal(j, ret);
   return nullptr;
+}
+
+inline const char* unmarshal(const std::string& raw, model::Location& ret) {
+  return unmarshal(raw.c_str(), ret);
 }
 
 inline void unmarshal(json::Json& j, int& ret) {
@@ -52,6 +56,51 @@ inline const char* unmarshal(const char* raw, model::Req& ret) {
   }
   unmarshal(j, ret);
   return nullptr;
+}
+
+inline const char* unmarshal(const std::string& raw, model::Req& ret) {
+  return unmarshal(raw.c_str(), ret);
+}
+
+inline json::Json convert(model::Location&& model) {
+  json::Json j(json::Json::Object{});
+  j.add("latitude", model.lat);
+  j.add("longitude", model.lng);
+  return j;
+}
+
+inline std::string marshal(const model::Location& model) {
+  return convert(model::Location(model)).marshal();
+}
+
+inline std::string marshal(model::Location&& model) {
+  return convert(std::move(model)).marshal();
+}
+
+inline json::Json convert(std::map<std::string, model::Location>&& model) {
+  json::Json j(json::Json::Object{});
+  for (auto& kv : model) {
+    j.add(kv.first, convert(std::move(kv.second)));
+  }
+  return j;
+}
+
+inline json::Json convert(model::Req&& model) {
+  json::Json j(json::Json::Object{});
+  j.add("id", model.id);
+  j.add("name", std::move(model.name));
+  j.add("src", convert(std::move(model.src)));
+  j.add("dest", convert(std::move(model.dest)));
+  j.add("extra", convert(std::move(model.extra)));
+  return j;
+}
+
+inline std::string marshal(const model::Req& model) {
+  return convert(model::Req(model)).marshal();
+}
+
+inline std::string marshal(model::Req&& model) {
+  return convert(std::move(model)).marshal();
 }
 
 } // namespace json
