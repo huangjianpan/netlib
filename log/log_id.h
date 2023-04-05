@@ -36,7 +36,7 @@ class LogIDGenerator {
 
 class LogID {
   friend class LogIDGenerator;
-
+  
  public:
   LogID() { memset(id_, 0, id_length); }
 

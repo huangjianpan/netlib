@@ -1,5 +1,4 @@
-#ifndef _TASK_COROUTINE_TASK_META_H_
-#define _TASK_COROUTINE_TASK_META_H_
+#pragma once
 
 #include "define.h"
 
@@ -129,5 +128,3 @@ struct TaskMeta {
 };
 
 }  // namespace task_coroutine
-
-#endif  // !_TASK_COROUTINE_TASK_META_H_

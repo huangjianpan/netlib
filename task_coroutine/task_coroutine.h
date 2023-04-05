@@ -1,22 +1,11 @@
-#ifndef _TASK_COROUTINE_H_
-#define _TASK_COROUTINE_H_
+#pragma once
 
 #include <assert.h>
+
 #include "task_control.h"
 #include "task_group.h"
 
 namespace task_coroutine {
-
-struct InitTaskCoroutine {
-  InitTaskCoroutine() {
-    g_task_control =
-        new (std::nothrow) TaskControl(TASK_COROUTINE_TASK_GROUP_NUM);
-    assert(g_task_control != nullptr);
-    g_task_control->start_worker_threads();
-  }
-};
-
-extern InitTaskCoroutine init_task_coroutine__;
 
 class Coroutine {
  public:
@@ -51,19 +40,16 @@ class Coroutine {
   // join 等待coroutine完成
   void join() {
     if (task_meta_ != nullptr) {
-      // TODO:
-      // 目前单个线程不会死锁
-      size_t i = 0;
       while ((task_meta_->state.load(std::memory_order_relaxed) &
               TaskMeta::state_fn_done) == 0) {
-        if (++i == 1000 && tls_task_group != nullptr) {
-          yield();
-          i = 0;  // 重新计数
-        }
+        yield();
       }
       try_destory();
     }
   }
+
+  // yield 换出当前coroutine
+  static void yield() { TaskGroup::reschedule(); }
 
  private:
   // try_destory 尝试销毁task_meta，修改task_meta的状态，在join和dtor时调用
@@ -76,12 +62,7 @@ class Coroutine {
     task_meta_ = nullptr;
   }
 
-  // yield 换出当前coroutine
-  void yield() { TaskGroup::reschedule(); }
-
   TaskMeta* task_meta_;
 };
 
 }  // namespace task_coroutine
-
-#endif  // !_TASK_COROUTINE_H_

@@ -7,14 +7,6 @@
 
 namespace logger {
 
-LogMsgPool::LogMsgPool(size_t capacity) : pool_(capacity) {
-  raw_data_ = new (std::nothrow) LogMsg[capacity];
-  assert(raw_data_ != nullptr);
-  for (size_t i = 0; i < capacity; ++i) {
-    pool_.push(&raw_data_[i]);
-  }
-}
-
 bool Logger::start_logger() {
   // check whether the log directory exists
   utils::file::Directory dir(conf_.directory.c_str());

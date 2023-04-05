@@ -1,5 +1,5 @@
-#ifndef _TASK_COROUTINE_TASK_SCHEDULING_QUEUE_
-#define _TASK_COROUTINE_TASK_SCHEDULING_QUEUE_
+#pragma once
+
 #include <condition_variable>
 #include <iostream>
 #include <mutex>
@@ -52,5 +52,3 @@ class TaskSchedulingQueue {
 };
 
 }  // namespace task_coroutine
-
-#endif  // !_TASK_COROUTINE_TASK_SCHEDULING_QUEUE_

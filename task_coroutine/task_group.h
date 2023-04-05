@@ -1,8 +1,9 @@
-#ifndef _TASK_COROUTINE_TASK_GROUP_H_
-#define _TASK_COROUTINE_TASK_GROUP_H_
+#pragma once
+
 #include <assert.h>
 
 #include "task_meta.h"
+#include "task_parking_lot.h"
 #include "task_scheduling_queue.hpp"
 
 namespace task_coroutine {
@@ -11,7 +12,7 @@ class TaskControl;
 
 class TaskGroup {
  public:
-  TaskGroup(TaskControl* task_control);
+  TaskGroup(TaskControl* task_control, ParkingLot* parking_lot);
 
   // wait_task 等待获取任务
   void wait_task(TaskMeta** task);
@@ -23,6 +24,9 @@ class TaskGroup {
       return nullptr;
     }
     sq_.push(task);
+#ifdef USE_PARKING_LOT
+    parking_lot_->notify();
+#endif
     return task;
   }
 
@@ -70,6 +74,7 @@ class TaskGroup {
  private:
   TaskSchedulingQueue<TaskMeta*> sq_;  // 调度队列
   TaskControl* task_control_;          // 所属的task_control
+  ParkingLot* parking_lot_;            // 用于等待任务的条件
   TaskMeta* main_task_;                // 线程main函数
   TaskMeta* curr_task_;                // 当前运行的task
   TaskMeta* done_task_;   // 上一个执行完成的task，需要释放内存
@@ -79,5 +84,3 @@ class TaskGroup {
 extern thread_local TaskGroup* tls_task_group;  // 每个工作线程的task_group
 
 }  // namespace task_coroutine
-
-#endif  // !_TASK_COROUTINE_TASK_GROUP_H_

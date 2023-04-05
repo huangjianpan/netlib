@@ -1,5 +1,5 @@
 {
-    "clang": "clang-10",
+    "clang": "clang-11",
     "cxx_files": [
         "../model/model.h"
     ],

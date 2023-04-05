@@ -9,6 +9,7 @@
 
 #include "log_data.h"
 #include "utils/blocked_queue.hpp"
+#include "utils/pool.hpp"
 #include "utils/spin_mutex.h"
 
 #define LOG_SEND(level, log_id, raw)                                \
@@ -33,21 +34,6 @@ struct LogMsg {
   const char* file_name;
   int line;
   LogData raw;
-};
-
-class LogMsgPool {
- public:
-  LogMsgPool(size_t capacity);
-
-  ~LogMsgPool() { delete[] raw_data_; }
-
-  LogMsg* get() { return pool_.pop(); }
-
-  void put(LogMsg* msg) { pool_.push(msg); }
-
- private:
-  utils::BlockedQueue<LogMsg*, utils::SpinMutex> pool_;
-  LogMsg* raw_data_;  // the LogMsg array, put all to pool_
 };
 
 struct LoggerConf {
@@ -99,7 +85,7 @@ class Logger {
   LoggerConf conf_;
 
   utils::BlockedQueue<LogMsg*> buf_;
-  LogMsgPool pool_;
+  utils::Pool<LogMsg, utils::SpinMutex> pool_;
   pthread_t t_hander_;
 };
 

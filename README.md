@@ -19,6 +19,12 @@ Json库
 #define TASK_COROUTINE_DEBUG 0
 ```
 
+### TODO
+
+yield其他解决方案:
+
+尝试获取task，未获取则切回main_task，否则调度获取的
+
 ## 日志logger
 
 ### 设计
@@ -88,6 +94,8 @@ LOG_ERROR(log_id, buf2); // right
 ## Json
 
 ### clang
+
+https://www.addictivetips.com/ubuntu-linux-tips/clang-on-ubuntu/
 
 ```bash
 // 下载clang-10

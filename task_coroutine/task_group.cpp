@@ -2,6 +2,7 @@
 
 #include <assert.h>
 #include <unistd.h>
+
 #include <chrono>
 #include <thread>
 
@@ -12,8 +13,9 @@ namespace task_coroutine {
 
 thread_local TaskGroup* tls_task_group = nullptr;
 
-TaskGroup::TaskGroup(TaskControl* task_control)
+TaskGroup::TaskGroup(TaskControl* task_control, ParkingLot* parking_lot)
     : task_control_(task_control),
+      parking_lot_(parking_lot),
       main_task_(TaskMeta::main_task()),
       curr_task_(main_task_),
       done_task_(nullptr),
@@ -25,6 +27,9 @@ TaskGroup::TaskGroup(TaskControl* task_control)
 // BUG:
 // co1依赖于co2，tg1运行co1遇到yield，进入wait_task，co1又没有入队，
 // 这时恰好co2被tg2执行掉了且所有tg的sq都空，tg1就会陷入wait_task的死循环
+// 目前解决方案：
+// Coroutine::yield -> TaskGroup::reschedule -> 切换回main_task_ ->
+// 回到主循环，在主循环中把yield_task_入队（随机）
 void TaskGroup::wait_task(TaskMeta** task) {
 again:
   if (sq_.try_pop(*task)) {
@@ -35,13 +40,21 @@ again:
       return;
     }
   }
-  // TODO: 暂时使用定时换醒
+#ifdef USE_PARKING_LOT
+  parking_lot_->wait();
+#else
   std::this_thread::sleep_for(std::chrono::microseconds(1));
+#endif
   goto again;
 }
 
 void TaskGroup::reschedule() {
   TaskGroup* g = tls_task_group;
+  if (g == nullptr) {  // if `tls_task_group` is nullptr, indicating that it
+                       // isn't a worker thread (eg. the main thread isn't a
+                       // worker thread.)
+    return;
+  }
   g->yield_task_ = g->curr_task_;
   g->curr_task_ = g->main_task_;
 #ifdef TASK_COROUTINE_DEBUG
@@ -55,7 +68,8 @@ void TaskGroup::reschedule() {
 
 void TaskGroup::run_main_task(TaskControl* task_control, size_t idx) {
   // 初始化task_group，即tls_task_group
-  tls_task_group = new (std::nothrow) TaskGroup(task_control);
+  tls_task_group = new (std::nothrow)
+      TaskGroup(task_control, task_control->alloc_parking_lot(idx));
   assert(tls_task_group != nullptr);
 
   // 设置task_group并等待所有task_group初始化完成
@@ -76,11 +90,15 @@ void TaskGroup::run_main_task(TaskControl* task_control, size_t idx) {
 #endif
 
     if (g->yield_task_ != nullptr) {  // reschedule后重新入队
-      g_task_control->choose_one_task_group()->sq_.push(g->yield_task_);
+      auto tg = g_task_control->choose_one_task_group();
+      tg->sq_.push(g->yield_task_);
+#ifdef USE_PARKING_LOT
+      tg->parking_lot_->notify();
+#endif
       g->yield_task_ = nullptr;
     }
   }
-
+  delete tls_task_group;
   return;
 }
 

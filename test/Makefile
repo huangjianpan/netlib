@@ -1,3 +1,18 @@
+test_http_server:
+	rm -rf core*
+	rm -rf main
+	g++ -Wall -std=c++17 -pthread -I ../ test_http_server.cpp ../http/*.cpp ../task_coroutine/*.cpp ../net/*.cpp ../log/*.cpp ../utils/*.cpp ../context/*.cpp -o main
+
+test_net_listener:
+	rm -rf core*
+	rm -rf main
+	g++ -Wall -std=c++17 -pthread -I ../ test_net_listener.cpp ../net/*.cpp ../log/*.cpp ../utils/*.cpp -o main
+
+test_net_address:
+	rm -rf core*
+	rm -rf main
+	g++ -Wall -pthread -I ../ test_net_address.cpp ../net/address.cpp -o main
+
 test_utils_file_directory:
 	rm -rf core*
 	rm -rf main

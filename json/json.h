@@ -412,8 +412,27 @@ class Json {
   static Json g_null_json_;
 };
 
-namespace tool {
+template <typename T>
+const char* unmarshal(const char* raw, T& ret) {
+  return nullptr;
+}
 
+template <typename T>
+const char* unmarshal(const std::string& raw, T& ret) {
+  return unmarshal(raw.c_str(), ret);
+}
+
+template <typename T>
+std::string marshal(const T& model) {
+  return "";
+}
+
+template <typename T>
+std::string marshal(T&& model) {
+  return "";
+}
+
+namespace tool {
 inline const char* skip_blank(const char* p) {
   while (*p == ' ' || *p == '\n' || *p == '\t') {
     ++p;

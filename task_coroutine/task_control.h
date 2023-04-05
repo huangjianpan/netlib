@@ -1,10 +1,11 @@
-#ifndef _TASK_COROUTINE_TASK_CONTROL_H_
-#define _TASK_COROUTINE_TASK_CONTROL_H_
+#pragma once
+
 #include <atomic>
 #include <random>
 #include <thread>
 
 #include "define.h"
+#include "task_parking_lot.h"
 #include "utils/random_number.h"
 
 namespace task_coroutine {
@@ -17,8 +18,18 @@ extern thread_local utils::RandomNumber
     tls_random_number;  // 随机数生成器每个线程一个
 
 class TaskControl {
+  struct Init {
+    Init();
+  };
+
+  static Init init_;
+
+ private:
+  static constexpr size_t TASK_GROUPS_NUM = 8;
+  static constexpr size_t PARKING_LOTS_NUM = 2;
+
  public:
-  TaskControl(const size_t task_groups_num);
+  TaskControl();
 
   TaskControl(const TaskControl&) = delete;
   TaskControl& operator=(const TaskControl&) = delete;
@@ -37,16 +48,21 @@ class TaskControl {
     return task_groups_[tls_random_number.generate()];
   }
 
-  size_t task_groups_num() const { return task_groups_num_; }
+  ParkingLot* alloc_parking_lot(size_t idx) {
+    return &parking_lots_[idx / ((task_groups_num() + parking_lots_num() - 1) /
+                                 parking_lots_num())];
+  }
+
+  static constexpr size_t task_groups_num() { return TASK_GROUPS_NUM; }
+
+  static constexpr size_t parking_lots_num() { return PARKING_LOTS_NUM; }
 
  private:
-  TaskGroup** task_groups_;       // task_group数组
-  const size_t task_groups_num_;  // task_group数量
-  std::thread* worker_threads_;   // task_group对应的thread
+  TaskGroup** task_groups_;      // task groups
+  ParkingLot* parking_lots_;     // parking lots
+  std::thread* worker_threads_;  // the thread to which the task group belongs
 
-  std::atomic<size_t> init_success_num_;  // 初始化worker线程数量
+  std::atomic<size_t> init_success_num_;  // for init task_group
 };
 
 }  // namespace task_coroutine
-
-#endif  // !_TASK_COROUTINE_TASK_CONTROL_H_
