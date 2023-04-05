@@ -1,9 +1,9 @@
 {
     "clang": "clang-10",
     "cxx_files": [
-        "../model/model.h"
+        "./model/model.h"
     ],
     "include_directory": [
-        "../json"
+        "/home/hjp/cpp/netlib/include"
     ]
 }

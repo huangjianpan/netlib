@@ -401,9 +401,9 @@ func (p *Generator) generateUnmarshalCodeCustom(f *FieldType) {
 		code += "}"
 		p.Code = append(p.Code, code)
 
-		p.Code = append(p.Code, fmt.Sprintf("inline const char* unmarshal(const char* raw, %s& ret) {\n"+
+		p.Code = append(p.Code, fmt.Sprintf("inline const char* unmarshal(const char* begin, const char* end, %s& ret) {\n"+
 			"  const char* errmsg = nullptr;\n"+
-			"  json::Json j = json::Json::unmarshal(raw, errmsg);\n"+
+			"  json::Json j = json::Json::unmarshal(begin, end, errmsg);\n"+
 			"  if (errmsg != nullptr) {\n"+
 			"    return errmsg;\n"+
 			"  }\n"+
@@ -411,7 +411,7 @@ func (p *Generator) generateUnmarshalCodeCustom(f *FieldType) {
 			"  return nullptr;\n}", f.Name))
 
 		p.Code = append(p.Code, fmt.Sprintf("inline const char* unmarshal(const std::string& raw, %s& ret) {\n"+
-			"  return unmarshal(raw.c_str(), ret);\n}", f.Name))
+			"  return unmarshal(raw.c_str(), raw.c_str() + raw.size(), ret);\n}", f.Name))
 	}
 }
 
