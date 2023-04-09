@@ -30,7 +30,7 @@ class HttpServer {
     }
     // check Req and Rsp can json marshal and unmarshal
     if (json::marshal(Req{}) == "" || json::marshal(Rsp{}) == "") {
-      printf("register post handler failed, please gen json code. route = %s\n",
+      printf("HttpServer: register post handler failed, please gen json code. route = %s\n",
              route);
       abort();
     }

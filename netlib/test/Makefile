@@ -1,3 +1,8 @@
+test_json:
+	rm -rf core*
+	rm -rf main
+	g++ -Wall -std=c++17 -pthread -I ../ test_json.cpp ../json/*.cpp -o main
+
 test_http_server:
 	rm -rf core*
 	rm -rf main

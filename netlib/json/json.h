@@ -62,7 +62,8 @@ class Json {
       "build string error: mismatch of right '\"'",          // 8
       "build string error: no memory",                       // 9
       "build array error: no memory",                        // 10
-      "build array error: mismatch ',' or ']'"               // 11
+      "build array error: mismatch ',' or ']'",              // 11
+      "build null error: expected null"                      // 12
   };
 
   using ObjectData = std::map<std::string, Json>;
@@ -80,7 +81,7 @@ class Json {
   };
 
   struct Type {
-    static constexpr size_t Null = 1 << 0;  // only g_null_json_ is null
+    static constexpr size_t Null = 1 << 0;
     static constexpr size_t Bool = 1 << 1;
     static constexpr size_t Integer = 1 << 2;
     static constexpr size_t Float = 1 << 3;
@@ -291,7 +292,7 @@ class Json {
     static_assert(
         std::is_integral<T>::value || std::is_floating_point<T>::value ||
             std::is_same<T, std::string>::value || std::is_same<T, bool>::value,
-        "Type T should be integer or float");
+        "Type T should be integer or float or string");
     if constexpr (std::is_same<T, bool>::value) {  // note: bool is integral
       return is_bool() ? b_ : false;
     } else if constexpr (std::is_integral<T>::value) {
@@ -351,6 +352,19 @@ class Json {
 
   bool is_string() const { return type_ & Type::String; }
 
+  size_t size() const {
+    if (is_string()) {
+      return data_ == nullptr ? 0 : static_cast<StringData*>(data_)->size();
+    }
+    if (is_array()) {
+      return data_ == nullptr ? 0 : static_cast<ArrayData*>(data_)->size();
+    }
+    if (is_object()) {
+      return data_ == nullptr ? 0 : static_cast<ObjectData*>(data_)->size();
+    }
+    return 0;
+  }
+
  private:
   bool is_error() const { return type_ & Type::Error; }
 
@@ -403,6 +417,8 @@ class Json {
   static Json build_error(const char* errmsg) {
     return Json((size_t)Type::Error, (void*)errmsg);
   }
+
+  static Json build_null(const char* begin, const char* end, const char*& next);
 
  private:
   size_t type_;

@@ -10,4 +10,6 @@ int main(int argc, char** argv) {
   return 0;
 }
 
-void register_route(http::HttpServer& svr) { svr.POST("/handler", Handler); }
+void register_route(http::HttpServer& svr) { 
+  svr.POST("/sudoku", Sudoku::handler);
+}

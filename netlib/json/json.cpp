@@ -250,6 +250,9 @@ Json Json::build(const char* begin, const char* end, const char*& next) {
   if (*begin == 't' || *begin == 'f') {
     return build_bool(begin, end, next);
   }
+  if (*begin == 'n') {
+    return build_null(begin, end, next);
+  }
   return build_error(ErrMsg[0]);
 }
 
@@ -406,6 +409,15 @@ Json Json::build_array(const char* raw, const char* end, const char*& next) {
   }
   next = p + 1;
   return Json(Type::Array, (void*)data);
+}
+
+Json Json::build_null(const char* begin, const char* end, const char*& next) {
+  if (begin + 4 < end && *begin == 'n' && *(begin + 1) == 'u' &&
+      *(begin + 2) == 'l' && *(begin + 3) == 'l') {
+    next = begin + 4;
+    return Json(Type::Null, nullptr);
+  }
+  return build_error(ErrMsg[12]);
 }
 
 Json Json::g_null_json_(Json::Type::Null, nullptr);

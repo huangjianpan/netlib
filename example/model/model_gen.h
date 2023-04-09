@@ -5,20 +5,19 @@
 
 namespace json {
 
-inline void unmarshal(json::Json& j, int& ret) {
-  j.move_to(ret);
-}
-
 inline void unmarshal(json::Json& j, std::string& ret) {
   j.move_to(ret);
 }
 
-inline void unmarshal(json::Json& j, model::Req& ret) {
-  unmarshal(j["id"], ret.id);
-  unmarshal(j["name"], ret.name);
+inline void unmarshal(json::Json& j, std::vector<std::string>& ret) {
+  j.move_to(ret, static_cast<void(*)(Json&, std::string&)>(unmarshal));
 }
 
-inline const char* unmarshal(const char* begin, const char* end, model::Req& ret) {
+inline void unmarshal(json::Json& j, model::SudokuReq& ret) {
+  unmarshal(j["sudoku"], ret.sudoku);
+}
+
+inline const char* unmarshal(const char* begin, const char* end, model::SudokuReq& ret) {
   const char* errmsg = nullptr;
   json::Json j = json::Json::unmarshal(begin, end, errmsg);
   if (errmsg != nullptr) {
@@ -28,19 +27,21 @@ inline const char* unmarshal(const char* begin, const char* end, model::Req& ret
   return nullptr;
 }
 
-inline const char* unmarshal(const std::string& raw, model::Req& ret) {
+inline const char* unmarshal(const std::string& raw, model::SudokuReq& ret) {
   return unmarshal(raw.c_str(), raw.c_str() + raw.size(), ret);
 }
 
-inline void unmarshal(json::Json& j, std::vector<int>& ret) {
-  j.move_to(ret, static_cast<void(*)(Json&, int&)>(unmarshal));
+inline void unmarshal(json::Json& j, int& ret) {
+  j.move_to(ret);
 }
 
-inline void unmarshal(json::Json& j, model::Rsp& ret) {
-  unmarshal(j["data"], ret.data);
+inline void unmarshal(json::Json& j, model::SudokuRsp& ret) {
+  unmarshal(j["errcode"], ret.errcode);
+  unmarshal(j["errmsg"], ret.errmsg);
+  unmarshal(j["sudoku"], ret.sudoku);
 }
 
-inline const char* unmarshal(const char* begin, const char* end, model::Rsp& ret) {
+inline const char* unmarshal(const char* begin, const char* end, model::SudokuRsp& ret) {
   const char* errmsg = nullptr;
   json::Json j = json::Json::unmarshal(begin, end, errmsg);
   if (errmsg != nullptr) {
@@ -50,44 +51,45 @@ inline const char* unmarshal(const char* begin, const char* end, model::Rsp& ret
   return nullptr;
 }
 
-inline const char* unmarshal(const std::string& raw, model::Rsp& ret) {
+inline const char* unmarshal(const std::string& raw, model::SudokuRsp& ret) {
   return unmarshal(raw.c_str(), raw.c_str() + raw.size(), ret);
 }
 
-inline json::Json convert(std::vector<int>&& model) {
+inline json::Json convert(std::vector<std::string>&& model) {
   json::Json j(json::Json::Array{});
   for (auto& elem : model) {
-    j.add(elem);
+    j.add(std::move(elem));
   }
   return j;
 }
 
-inline json::Json convert(model::Rsp&& model) {
+inline json::Json convert(model::SudokuReq&& model) {
   json::Json j(json::Json::Object{});
-  j.add("data", convert(std::move(model.data)));
+  j.add("sudoku", convert(std::move(model.sudoku)));
   return j;
 }
 
-inline std::string marshal(const model::Rsp& model) {
-  return convert(model::Rsp(model)).marshal();
+inline std::string marshal(const model::SudokuReq& model) {
+  return convert(model::SudokuReq(model)).marshal();
 }
 
-inline std::string marshal(model::Rsp&& model) {
+inline std::string marshal(model::SudokuReq&& model) {
   return convert(std::move(model)).marshal();
 }
 
-inline json::Json convert(model::Req&& model) {
+inline json::Json convert(model::SudokuRsp&& model) {
   json::Json j(json::Json::Object{});
-  j.add("id", model.id);
-  j.add("name", std::move(model.name));
+  j.add("errcode", model.errcode);
+  j.add("errmsg", std::move(model.errmsg));
+  j.add("sudoku", convert(std::move(model.sudoku)));
   return j;
 }
 
-inline std::string marshal(const model::Req& model) {
-  return convert(model::Req(model)).marshal();
+inline std::string marshal(const model::SudokuRsp& model) {
+  return convert(model::SudokuRsp(model)).marshal();
 }
 
-inline std::string marshal(model::Req&& model) {
+inline std::string marshal(model::SudokuRsp&& model) {
   return convert(std::move(model)).marshal();
 }
 
