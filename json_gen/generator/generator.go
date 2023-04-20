@@ -1,6 +1,7 @@
 package generator
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -60,7 +61,16 @@ func (p *Generator) RunCmdAndLoadAST() *Generator {
 	for _, file := range p.CXXHeaderFiles {
 		clangCmd := fmt.Sprintf(`%s -Xclang -ast-dump=json -fsyntax-only %s -x c++ "%s"`, p.Clang, include, file)
 		cmd := exec.Command("/bin/sh", "-c", clangCmd)
-		raw, _ := cmd.Output() // 忽略错误，std::map<int, std::vector<int>>会报错
+		var stderr bytes.Buffer
+		cmd.Stderr = &stderr // 设置标准错误输出缓存区
+		raw, err := cmd.Output()
+		if err != nil {
+			errmsg := stderr.String()
+			if strings.Contains(errmsg, "fatal error") { // 含有fatal error，退出
+				p.ErrMsg = errors.New(fmt.Sprint(err) + ": \n" + errmsg)
+				break
+			}
+		}
 		data := &AST{}
 		if err := json.Unmarshal(raw, data); err != nil {
 			p.ErrMsg = fmt.Errorf("unmarshal raw ast json error, file:%s, err:%v", file, err)
@@ -424,7 +434,7 @@ func (p *Generator) PrintCodes() *Generator {
 	for _, file := range p.CXXHeaderFiles {
 		s += fmt.Sprintf("#include \"%s\"\n", file)
 	}
-	s += fmt.Sprintf("#include \"%s\"\n", "json.h")
+	s += fmt.Sprintf("#include \"%s\"\n", "json/json.h")
 	fmt.Println(s)
 	fmt.Printf("namespace json {\n\n")
 	for _, code := range p.Code {
